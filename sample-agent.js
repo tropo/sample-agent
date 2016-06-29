@@ -2,10 +2,11 @@
 
 var token = "MYTOKEN";
 var launchURL = "https://api.tropo.com/1.0/sessions?action=create&token=";
-var ftpAddress = "ftp.yourserver.com/recordings/"
-var ftpUserName = "USERNAME";
-var ftpPassword = "PASSWORD";
+var ftpAddress = "ftp.tropo.com/recordings/"
+var ftpUserName = "MYUSERNAME";
+var ftpPassword = "MYPASSWPRD";
 var queueNumber = "+13215556677";
+var mySessionID = "";
 
 function httpGet(url){ //Performs GET requests here
 	connection = new java.net.URL(url).openConnection();
@@ -24,9 +25,14 @@ function httpGet(url){ //Performs GET requests here
 	}
 }
 
-function InboundLeg(mySessionID, myToken, myLaunchURL, myFTP, myUN, myPW, myNumber) { //For Inbound Portion of Call
+if (currentCall) {callLeg = "inbound";} //Assigns callLeg value if it's not already pre-defined.
+
+if (callLeg == "inbound") {
+
 	answer();
-	startCallRecording("ftp://" + myUN + ":" + myPW + "@" + myFTP + "INBOUND-" + mySessionID + ".wav");
+	mySessionID = currentCall.SessionId; //Assign SessionID to a friendly name, now that session exists.
+
+	startCallRecording("ftp://" + ftpUserName + ":" + ftpPassword + "@" + ftpAddress + "INBOUND-" + mySessionID + ".wav");
 	wait(1500);
 
 	say("Thank you for contacting the Call Center Template application.");
@@ -34,43 +40,37 @@ function InboundLeg(mySessionID, myToken, myLaunchURL, myFTP, myUN, myPW, myNumb
 
 	say("We are connecting you to an agent now.");
 
-	httpGet(myLaunchURL + myToken + "&theConfID=" + mySessionID + "&theCall=agent&theAgentNumber=" + myNumber);
+	httpGet(launchURL + token + "&theConfID=" + mySessionID + "&callLeg=agent&theAgentNumber=" + queueNumber);
 
-	conference(mySessionID);
+	log("xxxxxxxxxxLOGxxxxxxxxxx - SessionId = " + mySessionID); //Use this sessionId to control the current caller's hold state.
+
+	var isOnHold = false;
+	while (currentCall.isActive())
+	{
+		conference(mySessionID);
+		say("You are now on hold");
+		isOnHold = true;
+		while (isOnHold && currentCall.isActive()) { //Loop hold logic.
+			say("You are still on hold", {onSignal:function(event){isOnHold = false;}});
+		}
+		say("You are now off hold");
+	}
+
 	stopCallRecording();
 	hangup();
-}
 
-function AgentLeg(mySessionID, myConfID, myFTP, myUN, myPW) { //For Agent Portion of Call
-	log("xxxxxxxxxxLOGxxxxxxxxxx - " + mySessionID);
-	startCallRecording("ftp://" + myUN + ":" + myPW + "@" + myFTP + "INBOUND-" + myConfID + "-AGENT-" + mySessionID + ".wav");
+} else if (callLeg == "agent") {
+
+	call(queueNumber);
+	mySessionID = currentCall.SessionId; //Assign SessionID to a friendly name, now that session exists.
+
+	startCallRecording("ftp://" + ftpUserName + ":" + ftpPassword + "@" + ftpAddress + "INBOUND-" + theConfID + "-AGENT-" + mySessionID + ".wav");
 	wait(1500);
 
-	say("Connecting you to a caller now");
+	say("Connecting you to a caller now.");
 
-	conference(myConfID);
+	conference(theConfID);
+
 	stopCallRecording();
-}
 
-//Call Type Logic:
-
-var incoming = false; //Variable Constructor
-
-if(currentCall){ //If the call is inbound, set incoming to true
-	incoming = true;
-}
-
-var incoming = false; //Variable Constructor
-
-if(currentCall){ //If the call is inbound, set incoming to true
- incoming = true;
-}
-
-if (incoming) {
-	InboundLeg(currentCall.sessionId + "", token, launchURL, ftpAddress, ftpUserName, ftpPassword, queueNumber);
-} else if (theCall == "agent") {
-	call("+" + theAgentNumber);
-	AgentLeg(currentCall.sessionId, theConfID, ftpAddress, ftpUserName, ftpPassword);
-} else {
-	log("xxxxxxxxxxLOGxxxxxxxxxx - ERROR: NO DIRECTION");
 }
